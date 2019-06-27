@@ -6,9 +6,8 @@ const redis = require('redis');
 const redisStore = require('connect-redis')(session);
 const client  = redis.createClient();
 
-const pg = require('pg')
 const app = express();
-const router = express.Router();
+// const router = express.Router();
 
 app.use(logger('dev'));
 app.use(bodyParser.json());
@@ -22,64 +21,49 @@ app.use(session({
 
 const db = require('./db')
 
-function updateCache(resp, next) {
-    db.query(`SELECT * FROM "Todos" ORDER BY id DESC LIMIT 1`, (error, resToCache) => {
-        if (error) {
-            return next(error);
+// app.use('/',router);
+
+function cacheDB(resp, method) {
+    db.query('SELECT * FROM "Notes"', (postgresGETError, responseToCache) => {
+        if (postgresGETError) {
+            resp.send({message: 'Couldn\'t get any notes'});
+            return;
         }
-        client.get('/api/todos', (err, todos) => {
-            if (err) {
-                return next(err);
-            }
-            switch (todos) {
-                case null:
-                    todo = resToCache.rows.pop();
 
-                    client.set('/api/todos', JSON.stringify([todo]), (error_) => {
-                        if (error_) {
-                            next(error_);
-                        }
-                    })
-                    resp.send([todo])
+        client.set('/api/notes', JSON.stringify(responseToCache.rows));
 
-                    return;
-
-                default:
-                    let newTodos = JSON.parse(todos).concat(resToCache.rows.pop())
-
-                    client.set('/api/todos', JSON.stringify(newTodos), (error_) => {
-                        if (error_) {
-                            next(error_);
-                        }
-                    })
-
-                    resp.send(newTodos);
-            }                
-        })
-        
-    })
+        resp.send(method == 'POST' ? responseToCache.rows.pop() : responseToCache.rows);
+    });
 }
 
-app.use('/',router);
+app.post('/api/notes', (req, resp, next) => {
+    console.log(req.body);
+    db.query(
+        `INSERT INTO "Notes"(title, message)
+        VALUES ('${req.body.title}', '${req.body.message}');`,
 
-router.post('/api/todos', (req, resp, next) => {
-    db.query(`INSERT INTO "Todos"(title) VALUES ('${req.body.title}');`, (err, _) => {
-        if (err) {
-            return next(err);
+        (postgresPOSTError, insertionResponse) => {
+            if (postgresPOSTError) {
+                resp.send(insertionResponse);
+                return;
+            }
+
+            return cacheDB(resp, 'POST')
         }
-        return updateCache(resp, next);
-    })
+    )
 });
 
-router.get('/api/todos', (_, resp, __) => {
-    client.get('/api/todos', (_, todos) => {
-        switch (todos) {
+app.get('/api/notes', (req, resp, next) => {
+    client.get('/api/notes', (err, notes) => {
+        if (err) {
+            return cacheDB(resp, 'GET');
+        }
+        switch (notes) {
             case null:
-                resp.send([]);
-                return;
+                return cacheDB(resp, 'GET');
 
             default:
-                resp.send(JSON.parse(todos));
+                resp.send(JSON.parse(notes));
         }
     })
 })
