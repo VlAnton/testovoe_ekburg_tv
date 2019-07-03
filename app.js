@@ -51,7 +51,7 @@ function handleImage(files, formData) {
     formData.image = imageDestinationPath + `/${image.name}`;
 
     fs.writeFile(formData.image, imageContent, (err) => {
-        throw err;
+        console.log(err);
     })
 }
 
