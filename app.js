@@ -59,7 +59,7 @@ app.post('/api/notes', (req, resp, next) => {
                 const image = files.image;
                 const imageOriginPath = image.path;
                 const imageContent = fs.readFileSync(imageOriginPath);
-                const relativePath = `./static/${formData.title}`;
+                const relativePath = `./static`;
 
                 var imageDestinationPath = path.resolve(path.normalize(relativePath));
 
@@ -71,13 +71,12 @@ app.post('/api/notes', (req, resp, next) => {
                         fs.mkdirSync(imageDestinationPath);
                         imageDestinationPath += `/${image.name}`;
                 }
-                console.log(imageDestinationPath)
 
                 fs.writeFileSync(imageDestinationPath, imageContent, (err) => {
                     console.log(err);
                 })
 
-                formData.image = relativePath;
+                formData.image = relativePath + `/${image.name}`;
             }
 
             db.query(
@@ -91,7 +90,7 @@ app.post('/api/notes', (req, resp, next) => {
                         resp.send(postgresPOSTError);
                         return;
                     }
-        
+
                     return cacheDB(resp, 'POST');
             })
         }
@@ -104,9 +103,10 @@ app.post('/api/notes', (req, resp, next) => {
 
 app.get('/api/notes', (req, resp, next) => {
     client.get('/api/notes', (err, notes) => {
-        if (err) {
+        if (err) {     
             return cacheDB(resp, 'GET');
         }
+
         switch (notes) {
             case null:
                 return cacheDB(resp, 'GET');
