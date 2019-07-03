@@ -1,16 +1,18 @@
 const express = require('express');
+const session = require('express-session');
+const app = express();
+
+const redis = require('redis');
+const redisStore = require('connect-redis')(session);
+const client  = redis.createClient();
+
 const logger = require('morgan');
 const bodyParser = require('body-parser');
-const session = require('express-session');
-const redis = require('redis');
 const formidable = require('formidable');
+
 const fs = require('fs');
 const path = require('path');
 
-const redisStore = require('connect-redis')(session);
-const client  = redis.createClient();
-const app = express();
-// const router = express.Router();
 
 app.use(logger('dev'));
 app.use(bodyParser.json());
@@ -40,51 +42,64 @@ function cacheDB(resp, method) {
 }
 
 app.post('/api/notes', (req, resp, next) => {
-
     const form = new formidable.IncomingForm();
 
     form.parse(req, (err, fields, files) => {
+        var formData = { title: null, message: null, image: null };
+
         if (err) {
             throw err;
         }
-        console.log(files.image)
-        return;
 
-        if (fields.title && fields.message || files.image) {
-            // const imageBytesArr = files.image ?
-            //     [].slice.call(fs.readFileSync(files.image.path)) :
-            //     null;
+        if (fields.title) {
+            formData.title = fields.title;
+            formData.message = fields.message;
+
+            if (files.image) {
+                const image = files.image;
+                const imageOriginPath = image.path;
+                const imageContent = fs.readFileSync(imageOriginPath);
+                const relativePath = `./static/${formData.title}`;
+
+                var imageDestinationPath = path.resolve(path.normalize(relativePath));
+
+                switch (fs.existsSync(imageDestinationPath)) {
+                    case true:
+                        imageDestinationPath += `/${image.name}`;
+                        break;
+                    case false:
+                        fs.mkdirSync(imageDestinationPath);
+                        imageDestinationPath += `/${image.name}`;
+                }
+                console.log(imageDestinationPath)
+
+                fs.writeFileSync(imageDestinationPath, imageContent, (err) => {
+                    console.log(err);
+                })
+
+                formData.image = relativePath;
+            }
+
             db.query(
-                `INSERT INTO "Notes"(title, message) VALUES (
-                    '${fields.title}',
-                    '${fields.message}'
-                );`,
-                (postgresPOSTError, insertionResponse) => {
+                `INSERT INTO "Notes"(title, message, image) VALUES (
+                    '${formData.title}',
+                    '${formData.message}',
+                    '${formData.image}'
+                );`, (postgresPOSTError, insertionResponse) => {
+
                     if (postgresPOSTError) {
-                        // throw postgresPOSTError;
-                        return resp.send(postgresPOSTError);
+                        resp.send(postgresPOSTError);
+                        return;
                     }
         
-                    return cacheDB(resp, 'POST')
-                }
-            )
+                    return cacheDB(resp, 'POST');
+            })
+        }
+        else {
+            resp.send({ error: 'Incorrect input' })
         }
     })
-    // console.log(fields);
-    // return
-    // db.query(
-    //     `INSERT INTO "Notes"(title, message)
-    //     VALUES ('${req.body.title}', '${req.body.message}');`,
 
-    //     (postgresPOSTError, insertionResponse) => {
-    //         if (postgresPOSTError) {
-    //             resp.send(insertionResponse);
-    //             return;
-    //         }
-
-    //         return cacheDB(resp, 'POST')
-    //     }
-    // )
 });
 
 app.get('/api/notes', (req, resp, next) => {
