@@ -9,9 +9,9 @@ const client  = redis.createClient();
 const logger = require('morgan');
 const bodyParser = require('body-parser');
 const formidable = require('formidable');
-
 const fs = require('fs');
-const path = require('path');
+
+const db = require('./db');
 
 
 app.use(logger('dev'));
@@ -24,11 +24,8 @@ app.use(session({
     resave: false
 }));
 
-const db = require('./db')
 
-// app.use('/',router);
-
-function cacheDB(resp, method) {
+function cachingDBHandler(resp, method) {
     db.query('SELECT * FROM "Notes"', (postgresGETError, responseToCache) => {
         if (postgresGETError) {
             resp.send({message: 'Couldn\'t get any notes'});
@@ -40,6 +37,42 @@ function cacheDB(resp, method) {
         resp.send(method == 'POST' ? responseToCache.rows.pop() : responseToCache.rows);
     });
 }
+
+function handleImage(files, formData) {
+    const imageDestinationPath = '/var/www/static';
+    const image = files.image;
+    const imageOriginPath = image.path;
+    const imageContent = fs.readFileSync(imageOriginPath);
+
+    if (!fs.existsSync(imageDestinationPath)) {
+        fs.mkdirSync(imageDestinationPath);
+    }
+
+    formData.image = imageDestinationPath + `/${image.name}`;
+
+    fs.writeFile(formData.image, imageContent, (err) => {
+        throw err;
+    })
+}
+
+
+function insertData(formData, resp) {
+    db.query(
+        `INSERT INTO "Notes"(title, message, image) VALUES (
+            '${formData.title}',
+            '${formData.message}',
+            '${formData.image}'
+        );`, (postgresPOSTError, insertionResponse) => {
+
+            if (postgresPOSTError) {
+                resp.send(postgresPOSTError);
+                return;
+            }
+
+            return cachingDBHandler(resp, 'POST');
+    })
+}
+
 
 app.post('/api/notes', (req, resp, next) => {
     const form = new formidable.IncomingForm();
@@ -56,46 +89,13 @@ app.post('/api/notes', (req, resp, next) => {
             formData.message = fields.message;
 
             if (files.image) {
-                const image = files.image;
-                const imageOriginPath = image.path;
-                const imageContent = fs.readFileSync(imageOriginPath);
-                const relativePath = `./static`;
-
-                var imageDestinationPath = path.resolve(path.normalize(relativePath));
-
-                switch (fs.existsSync(imageDestinationPath)) {
-                    case true:
-                        imageDestinationPath += `/${image.name}`;
-                        break;
-                    case false:
-                        fs.mkdirSync(imageDestinationPath);
-                        imageDestinationPath += `/${image.name}`;
-                }
-
-                fs.writeFileSync(imageDestinationPath, imageContent, (err) => {
-                    console.log(err);
-                })
-
-                formData.image = relativePath + `/${image.name}`;
+                handleImage(files, formData);
             }
 
-            db.query(
-                `INSERT INTO "Notes"(title, message, image) VALUES (
-                    '${formData.title}',
-                    '${formData.message}',
-                    '${formData.image}'
-                );`, (postgresPOSTError, insertionResponse) => {
-
-                    if (postgresPOSTError) {
-                        resp.send(postgresPOSTError);
-                        return;
-                    }
-
-                    return cacheDB(resp, 'POST');
-            })
+            return insertData(formData, resp);
         }
         else {
-            resp.send({ error: 'Incorrect input' })
+            resp.send({ error: 'Incorrect input' });
         }
     })
 
@@ -104,12 +104,12 @@ app.post('/api/notes', (req, resp, next) => {
 app.get('/api/notes', (req, resp, next) => {
     client.get('/api/notes', (err, notes) => {
         if (err) {     
-            return cacheDB(resp, 'GET');
+            return cachingDBHandler(resp, 'GET');
         }
 
         switch (notes) {
             case null:
-                return cacheDB(resp, 'GET');
+                return cachingDBHandler(resp, 'GET');
 
             default:
                 resp.send(JSON.parse(notes));
