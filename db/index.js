@@ -4,7 +4,7 @@ const pool = new Pool()
 const client = new Client({
     user: 'antonvlasov',
     host: 'localhost',
-    database: 'todos-dev',
+    database: 'ekburg_testovoe',
     password: null,
     port: 5432,
 })
