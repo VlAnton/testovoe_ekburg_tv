@@ -10,7 +10,7 @@ const logger = require('morgan');
 const bodyParser = require('body-parser');
 
 const handlers = require('./handlers');
-const {handleGET, handlePOST} = handlers;
+const {handleGET, handlePOST, handleGETByID, handlePATCH} = handlers;
 
 const port = 8080;
 
@@ -25,13 +25,21 @@ app.use(session({
     resave: false
 }));
 
-app.post('/api/notes', (req, resp, next) => {
-    handlePOST(req, resp, client);
+app.post('/api/notes', (req, res) => {
+    handlePOST(req, res, client);
 });
 
-app.get('/api/notes', (req, resp, next) => {
-    handleGET(resp, client);
-})
+app.get('/api/notes', (req, res) => {
+    handleGET(res, client);
+});
+
+app.get('/api/notes/:id', (req, res) => {
+    handleGETByID(req, res, client);    
+});
+
+app.patch('/api/notes/:id', (req, res) => {
+    handlePATCH(req, res, client);    
+});
 
 app.listen(port, () => {
     console.log(`Listening to ${port}`)
