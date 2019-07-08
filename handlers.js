@@ -12,9 +12,11 @@ function handleDBCaching(resp, method, client) {
 
         client.set('/api/notes', JSON.stringify(responseToCache.rows));
 
-        resp.send(method !== 'GET' ?
-                        {method, status: 'success'} :
-                        responseToCache.rows);
+        resp.send(
+            method !== 'GET' ?
+            {method, status: 'success'} :
+            responseToCache.rows
+        );
     });
 }
 
@@ -187,18 +189,15 @@ function patchHandler(req, res, client) {
                                 res.send(getResponse);
                             }
                             let note = getResponse.rows.pop();
-                            console.log(note)
 
                             handleUpdating(res, formData, note, client, files, id);
                         });
                     } else {
                         note = JSON.parse(notes).filter(item => item.notes_id === id).pop();
-                        console.log(note)
                         handleUpdating(res, formData, note, client, files, id);
                     }
                 })
             } else {
-                console.log(note)
                 handleUpdating(res, formData, note, client, files, id);
             }
         });
